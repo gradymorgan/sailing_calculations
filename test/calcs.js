@@ -1,5 +1,5 @@
 var assert = require('chai').assert;
-var calcs = require('../src/calcs').calcs;
+var calcs = require('../src/calcs');
 
 describe('bearing', function() {
     it(' should calculate correctly', function() {
@@ -27,5 +27,35 @@ describe('tws', function() {
 describe('twa', function() {
     it('should calculate correctly', function() {
         assert.closeTo( calcs.twa( 6, 45, 8.84), 73.68, 0.01 );
+    });
+});
+
+describe('courseDistance', function() {
+    it('should calculate correctly', function() {
+        var course = "SABYABF";
+        var marks = {
+              "S": [
+                -122.41745850000001,
+                47.71693833333334
+              ],
+              "A": [
+                -122.41766816666669,
+                47.7380135
+              ],
+              "B": [
+                -122.41946033333333,
+                47.738018833333335
+              ],
+              "Y": [
+                -122.41720066666667,
+                47.708699833333334
+              ],
+              "F": [
+                -122.41745850000001,
+                47.71693833333334
+              ]
+            };
+
+        assert.closeTo( calcs.courseDistance(course, marks), 6.2, 0.01 );
     });
 });

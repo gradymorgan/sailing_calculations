@@ -137,6 +137,17 @@
             //drift is the magnitude of the current vector
             var _drift = Math.sqrt(current_x * current_x + current_y * current_y);
             return _drift;
+        },
+
+        courseDistance: function courseLength(course, marks) {
+            var distance = 0;
+            for (var i=1; i < course.length; i++) {
+                if ( course[i-1] in marks && course[i] in marks ) {
+                    distance += calcs.distance( marks[course[i-1]][1], marks[course[i-1]][0], 
+                                                marks[course[i]][1], marks[course[i]][0] );
+                }
+            }
+            return distance;
         }
     };
 
