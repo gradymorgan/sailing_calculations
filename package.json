@@ -1,7 +1,7 @@
 {
   "name": "homegrown-sailing",
   "description": "Bunch of sailing related functions and utilities.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "homepage": "http://homegrownmarine.com",
   "main": "index.js",
   "keywords": [
@@ -24,9 +24,6 @@
     "lodash": "^4.2.1",
     "moment": "^2.11.2"
   },
-  "scripts": {
-    "postpublish": "VERSION=`node -e 'console.log(require(\"./package.json\").version)'`; git push && git tag -am \"Release $VERSION.\" v${VERSION} && git push --tags"
-  },
   "devDependencies": {
     "babel-core": "^5.5.6",
     "chai": "*",
@@ -37,9 +34,13 @@
     "gulp-eslint": "^0.13.2",
     "gulp-file": "^0.2.0",
     "gulp-if": "^1.2.5",
+    "gulp-jshint": "^2.0.0",
     "gulp-load-plugins": "^0.10.0",
+    "gulp-mocha": "^2.2.0",
+    "gulp-plumber": "^1.1.0",
     "gulp-sourcemaps": "^1.5.0",
-    "mocha": "*"
+    "jshint": "^2.9.1",
+    "jshint-stylish": "^2.1.0"
   },
   "eslintConfig": {
     "env": {

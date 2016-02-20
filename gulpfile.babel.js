@@ -5,16 +5,16 @@ import del from 'del';
 const $ = gulpLoadPlugins();
 
 gulp.task('lint', function () {
-  return gulp.src(paths.lint)
-    .pipe($.jshint('.jshintrc'))
-    .pipe($.plumber(plumberConf))
-    .pipe($.jscs())
+  return gulp.src(["./src/*.js", "./test/*.js"])
+    .pipe($.jshint())
+    .pipe($.plumber())
+    // .pipe($.jscs())
     .pipe($.jshint.reporter('jshint-stylish'));
 });
 
 gulp.task('unitTest', function () {
-  gulp.src(paths.tests, {cwd: __dirname})
-    .pipe($.plumber(plumberConf))
+  gulp.src("./test/*.js")
+    .pipe($.plumber())
     .pipe($.mocha({ reporter: 'list' }));
 });
 
