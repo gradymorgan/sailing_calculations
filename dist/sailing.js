@@ -4,9 +4,198 @@ this.homegrown=this.homegrown||{};
         factory(exports, require('lodash'));
     }
     else {
-        factory((global.homegrown.utilities = {}), global._);
+        factory((global.homegrown.calculations = {}), global._);
     }
-}(this, function (exports, _) {'use strict';
+}(this, function (exports, _) { 'use strict';
+
+    var R = 3440.06479; //radius of earth in nautical miles
+
+    var deg = function deg(radians) {
+        return calcs.normalizeHeading(radians*180/Math.PI, 360);
+    };
+
+    var rad = function rad(degrees) {
+        return degrees * Math.PI / 180;
+    };
+
+    var lawOfCosines = function(a, b, gamma) {
+        return Math.sqrt(a * a + b * b - 2 * b * a * Math.cos(rad(Math.abs(gamma))));
+    };
+
+    var calcs = {
+        tws: function tws(speed, awa, aws) {
+            //TODO: heel compensation
+            return lawOfCosines(speed, aws, awa);
+        },
+
+        twa: function twa(speed, awa, tws) {
+            var angle = deg(Math.asin(speed * Math.sin(rad(Math.abs(awa))) / tws)) + Math.abs(awa);
+            if (awa < 0) angle *= -1;
+            return angle;
+        },
+
+        gws: function gws(sog, awa, aws) {
+            return lawOfCosines(sog, aws, awa);
+        },
+
+        gwd: function gwd(sog, cog, awa, gws) {
+            var gwa = calcs.twa(sog, awa, gws);
+            return calcs.normalizeHeading(cog + gwa, 360);
+        },
+
+        vmg: function vmg(speed, twa) {
+            return Math.abs(speed * Math.cos(rad(twa)));
+        },
+
+        twd: function twd(hdg, twa) {
+            return calcs.normalizeHeading(hdg + twa, 360);
+        },
+
+        //see: http://www.movable-type.co.uk/scripts/latlong.html
+        distance: function distance(lat1, lon1, lat2, lon2) {
+            lat1 = rad(lat1);
+            lat2 = rad(lat2);
+            lon1 = rad(lon1);
+            lon2 = rad(lon2);
+
+            var dLat = lat2-lat1,
+                dLon = lon2-lon1;
+            
+            var a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+            return R * c;
+        },
+
+        bearing: function bearing(lat1, lon1, lat2, lon2) {
+            lat1 = rad(lat1);
+            lat2 = rad(lat2);
+            lon1 = rad(lon1);
+            lon2 = rad(lon2);
+            
+            var dLon = lon2-lon1;
+            
+            var y = Math.sin(dLon) * Math.cos(lat2);
+            var x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+            
+            return deg( Math.atan2(y, x) );
+        },
+
+        steer: function steer(from, to) {
+            var diff = to - from;
+            
+
+            return diff;
+        },
+
+        crossTrackError: function crossTrackError(fromLat, fromLon, lat, lon, toLat, toLan) {
+            var d = distance(fromLat, fromLon, toLat, toLan);
+            var b1 = bearing(fromLat, fromLon, toLat, toLan);
+            var b2 = bearing(fromLat, fromLon, lat, lon);
+            return Math.asin(Math.sin(d/R) * Math.sin(rad(b2-b1))) * R;
+        },
+
+        set: function set(speed, hdg, sog, cog) {
+            //GM: TODO: understand 90 deg offset.
+            //convert cog and hdg to radians, with north right
+            hdg = rad(90.0 - hdg);
+            cog = rad(90.0 - cog);
+
+            //break out x and y components of current vector
+            var current_x = sog * Math.cos(cog) - speed * Math.cos(hdg);
+            var current_y = sog * Math.sin(cog) - speed * Math.sin(hdg);
+
+            //set is the angle of the current vector (note we special case pure North or South)
+            var _set = 0;
+            if ( current_x === 0 ) {
+                _set = current_y < 0? 180: 0;
+            }
+            else {
+                //normalize 0 - 360
+                _set = calcs.normalizeHeading(90.0 - deg(Math.atan2(current_y, current_x)), 360);
+            }
+            return _set;
+        },
+
+        drift: function drift(speed, hdg, sog, cog) {
+            //GM: TODO: understand 90 deg offset.
+            //convert cog and hdg to radians, with north right
+            hdg = rad(90.0 - hdg);
+            cog = rad(90.0 - cog);
+
+            //break out x and y components of current vector
+            var current_x = sog * Math.cos(cog) - speed * Math.cos(hdg);
+            var current_y = sog * Math.sin(cog) - speed * Math.sin(hdg);
+
+            //drift is the magnitude of the current vector
+            var _drift = Math.sqrt(current_x * current_x + current_y * current_y);
+            return _drift;
+        },
+
+        offest: function( offset ) {
+            return function(value) {
+                return value + offset;
+            }
+        },
+
+        multiplied: function( factor ) {
+            return function(value) {
+                return value * factor;
+            }
+        },
+
+        normalizeAngle: function(awa) {
+            if (awa > 180) {
+                awa = -1 * (360 - awa);
+            }
+            if (awa < -180) {
+                awa = (360 + awa);
+            }
+            return awa;
+        },
+
+        normalizeHeading: function(heading, base) {
+            base = base || 360;
+
+            return (heading + base) % base;
+        },
+
+        adjustAwaForHeel: function( awa, heel ) {
+            var adjustedAwa = deg(Math.atan( Math.tan(rad(awa)) / Math.cos(rad(heel)) ));
+            if (awa > 90) {
+                adjustedAwa += 180;
+            }
+            if (awa < -90) {
+                adjustedAwa -= 180;
+            }
+            return adjustedAwa;
+        },
+
+
+
+        courseDistance: function courseLength(course, marks) {
+            var distance = 0;
+            for (var i=1; i < course.length; i++) {
+                if ( course[i-1] in marks && course[i] in marks ) {
+                    distance += calcs.distance( marks[course[i-1]][1], marks[course[i-1]][0], 
+                                                marks[course[i]][1], marks[course[i]][0] );
+                }
+            }
+            return distance;
+        }
+    };
+
+    _.extend(exports, calcs);
+}));
+
+(function (global, factory) {
+    if (typeof exports === 'object' && typeof module !== 'undefined') {
+        factory(exports, require('lodash'), require('./calcs.js'));
+    }
+    else {
+        factory((global.homegrown.utilities = {}), global._, global.homegrown.calculations);
+    }
+}(this, function (exports, _, calcs) {'use strict';
 
     //from stack overflow
     var remove_comments_regex = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg;
@@ -21,65 +210,80 @@ this.homegrown=this.homegrown||{};
 
     var utilities = {
         /**
-         * given a metric, will compute it's derivitive.
-         * @param name - the name of the derivitive
+         * given a metric, will compute it's derivitive and append incoming data points
+         *          with new metric.
+         * @param name - the name of the new metric created from the derivitive
          * @param metric - the name of the metric to calculate the derivitive from
          * @param [scaleFactor] - optional conversion factor, if the new metric should
          *                        be in different units.
          * @return 
-
-         * Example: var acceleration = derivitive('acceleration', 'speed');
-         * assert acceleration({'speed': 5, 't':1000}) == null //first execution
-         * assert acceleration({'speed': 5, 't':1000}) == {'acceleration': 0}
-         * assert acceleration({'speed': 6, 't':1000}) == {'acceleration': 1}
          */
-
-        //TODO: rename derivative
-        derivitive: function derivitive(name, metric, scaleFactor) {
+        derivative: function derivative(name, metric, scaleFactor) {
             scaleFactor = scaleFactor || 1;
             var lastValue = null, lastTime;
 
-            return function(args) {
-                var result = null;
-
-                if (metric in args) {
+            return function(point) {
+                if (metric in point) {
                     if (lastValue !== null) {
-                        var delta = (args[metric] - lastValue) / ((args.t - lastTime)/1000) * scaleFactor;
+                        var delta = (point[metric] - lastValue) / ((point.t - lastTime)/1000) * scaleFactor;
 
-                        result = {};
-                        result[name] = delta;
+                        point[name] = delta;
                     }
 
-                    lastValue = args[metric];
-                    lastTime = args.t;
+                    lastValue = point[metric];
+                    lastTime = point.t;
                 }
-
-                return result;
             };
         },
-        average: function average(name, metric, size) {
+        /**
+         * will average a metric with a trailing window, and append the new value to the 
+         *          incoming point.
+         * @param name - the name of the new metric created from the average
+         * @param 
+         * 
+         */
+        average: function average(name, metric, windowSize) {
             var rolling = 0;
             var counter = 0;
             var windowX = [];
 
-            return function(args) {
-                var result = null;
-
-                if (metric in args) {
-                    var pos = counter % size;
+            return function(point) {
+                if (metric in point) {
+                    var pos = counter % windowSize;
                     counter++;
 
                     if (windowX[pos]) {
                         rolling -= windowX[pos];
                     }
-                    rolling += args[metric];
-                    windowX[pos] = args[metric];
+                    rolling += point[metric];
+                    windowX[pos] = point[metric];
 
-                    result = {};
-                    result[name] = rolling / windowX.length;
+                    point[name] = rolling / windowX.length;
                 }
+            };
+        },
 
-                return result;
+        inlineUpdate: function inlineUpdate(funct, property) {
+            return function(point) {
+                if ( property in point ) {
+                    point[property] = funct(point[property]);
+                }
+            };
+        },
+
+        /**
+         * Adjust Awa based on Heel angle.
+         */
+        inlineAwaAdjustment: function inlineAwaAdjustment() {
+            var lastHeel = 0;
+
+            return function(point) {
+                if ( 'heel' in point ) {
+                    lastHeel = point.heel;
+                }
+                if ( 'awa' in point ) {
+                    point.awa = calcs.adjustAwaForHeel(point.awa, lastHeel);
+                }
             };
         },
 
@@ -88,20 +292,18 @@ this.homegrown=this.homegrown||{};
          * @param funct - the name of the function will be used to name the return value.  
          *                The name of the arguments will be used to pull the arguments out 
          *                of maps of possible arguments.
-         * @return {object} - will return null if all of the arguments aren't avaible to execute the
-         *                    function, or an object of the form: {function_name: result}.
          */
-        delayedInputs: function delayedInputs(funct) {
-            var argumentNames = getParamNames(funct);
+        delayedInputs: function delayedInputs(funct, output, argumentNames) {
+            argumentNames = argumentNames || getParamNames(funct);
+            output = output || funct.name;
+
             var runningArgs = [];
 
-            return function(args) {
-                // var presentValues = _.map(argumentNames, function(name) { return args[name]; });
-
+            return function(point) {
                 var allSet = true;
                 for( var i=0; i < argumentNames.length; i++ ) {
-                    if ( argumentNames[i] in args ) {
-                        runningArgs[i] = args[argumentNames[i]];
+                    if ( argumentNames[i] in point ) {
+                        runningArgs[i] = point[argumentNames[i]];
                     }
 
                     if ( !runningArgs[i] ) {
@@ -113,12 +315,9 @@ this.homegrown=this.homegrown||{};
                 if (allSet) {
                     var result = funct.apply(this, runningArgs);
                     runningArgs = [];
-                    var obj = {};
-                    obj[funct.name] = result;
-                    return obj;
+                    
+                    point[output] = result;
                 }
-
-                return null;
             };
         },
 
@@ -233,6 +432,11 @@ this.homegrown=this.homegrown||{};
 
             return segments;
         }, 
+
+        /**
+         * Calulate the circular mean of an array of angles
+         * 
+         */
         circularMean: function circularMean(dat) {
             var sinComp = 0, cosComp = 0;
             _.each(dat, function(angle) {
@@ -246,151 +450,6 @@ this.homegrown=this.homegrown||{};
 
     _.extend(exports, utilities);
 }));
-(function (global, factory) {
-    if (typeof exports === 'object' && typeof module !== 'undefined') {
-        factory(exports, require('lodash'));
-    }
-    else {
-        factory((global.homegrown.calculations = {}), global._);
-    }
-}(this, function (exports, _) { 'use strict';
-
-    var R = 3440.06479; //radius of earth in nautical miles
-
-    var deg = function deg(radians) {
-        return (radians*180/Math.PI + 360) % 360;
-    };
-
-    var rad = function rad(degrees) {
-        return degrees * Math.PI / 180;
-    };
-
-    var lawOfCosines = function(a, b, gamma) {
-        return Math.sqrt(a * a + b * b - 2 * b * a * Math.cos(rad(Math.abs(gamma))));
-    };
-
-    var calcs = {
-        // adjustedAwa: function awa(awa, heel) {
-        //     return deg(atan( tan(rad(awa)) / cos(rad(heel)) ));
-        // },
-        tws: function tws(speed, awa, aws) {
-            //TODO: heel compensation
-            return lawOfCosines(speed, aws, awa);
-        },
-
-        twa: function twa(speed, awa, tws) {
-            var angle = deg(Math.asin(speed * Math.sin(rad(Math.abs(awa))) / tws)) + Math.abs(awa);
-            if (awa < 0) angle *= -1;
-            return angle;
-        },
-
-        gws: function gws(sog, awa, aws) {
-            return lawOfCosines(sog, aws, awa);
-        },
-
-        gwd: function gwd(sog, cog, awa, gws) {
-            var gwa = calcs.twa(sog, awa, gws);
-            return (cog + gwa + 360) % 360;
-        },
-
-        vmg: function vmg(speed, twa) {
-            return Math.abs(speed * Math.cos(rad(twa)));
-        },
-
-        twd: function twd(hdg, twa) {
-            return (hdg + twa + 360) % 360;
-        },
-
-        //see: http://www.movable-type.co.uk/scripts/latlong.html
-        distance: function distance(lat1, lon1, lat2, lon2) {
-            lat1 = rad(lat1);
-            lat2 = rad(lat2);
-            lon1 = rad(lon1);
-            lon2 = rad(lon2);
-
-            var dLat = lat2-lat1,
-                dLon = lon2-lon1;
-            
-            var a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon/2) * Math.sin(dLon/2);
-            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-            return R * c;
-        },
-
-        bearing: function bearing(lat1, lon1, lat2, lon2) {
-            lat1 = rad(lat1);
-            lat2 = rad(lat2);
-            lon1 = rad(lon1);
-            lon2 = rad(lon2);
-            
-            var dLon = lon2-lon1;
-            
-            var y = Math.sin(dLon) * Math.cos(lat2);
-            var x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
-            
-            return deg( Math.atan2(y, x) );
-        },
-
-        steer: function steer(from, to) {
-            var diff = to - from;
-            if ( diff > 180 ) {
-                diff = 360 - diff;
-            }
-            else if ( diff < -180 ) {
-                diff = 360 + diff;
-            }
-
-            return diff;
-        },
-
-        crossTrackError: function crossTrackError(fromLat, fromLon, lat, lon, toLat, toLan) {
-            var d = distance(fromLat, fromLon, toLat, toLan);
-            var b1 = bearing(fromLat, fromLon, toLat, toLan);
-            var b2 = bearing(fromLat, fromLon, lat, lon);
-            return Math.asin(Math.sin(d/R) * Math.sin(rad(b2-b1))) * R;
-        },
-
-        set: function set(speed, hdg, sog, cog) {
-            //GM: TODO: understand 90 deg offset.
-            //convert cog and hdg to radians, with north right
-            hdg = rad(90.0 - hdg);
-            cog = rad(90.0 - cog);
-
-            //break out x and y components of current vector
-            var current_x = sog * Math.cos(cog) - speed * Math.cos(hdg);
-            var current_y = sog * Math.sin(cog) - speed * Math.sin(hdg);
-
-            //set is the angle of the current vector (note we special case pure North or South)
-            var _set = 0;
-            if ( current_x === 0 ) {
-                _set = current_y < 0? 180: 0;
-            }
-            else {
-                //normalize 0 - 360
-                _set = (90.0 - deg(Math.atan2(current_y, current_x)) + 360) % 360;
-            }
-            return _set;
-        },
-
-        drift: function drift(speed, hdg, sog, cog) {
-            //GM: TODO: understand 90 deg offset.
-            //convert cog and hdg to radians, with north right
-            hdg = rad(90.0 - hdg);
-            cog = rad(90.0 - cog);
-
-            //break out x and y components of current vector
-            var current_x = sog * Math.cos(cog) - speed * Math.cos(hdg);
-            var current_y = sog * Math.sin(cog) - speed * Math.sin(hdg);
-
-            //drift is the magnitude of the current vector
-            var _drift = Math.sqrt(current_x * current_x + current_y * current_y);
-            return _drift;
-        }
-    };
-
-    _.extend(exports, calcs);
-}));
-
 (function (global, factory) {
     if (typeof exports === 'object' && typeof module !== 'undefined') {
         factory(exports, require('lodash'), require('moment'), require('./calcs.js'));

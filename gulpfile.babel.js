@@ -21,7 +21,7 @@ gulp.task('unitTest', function () {
 gulp.task('clean', del.bind(null, ['.tmp', 'dist']));
 
 gulp.task('dist', function() {
-  return gulp.src(['./src/utilities.js', './src/calcs.js', './src/maneuvers.js'])
+  return gulp.src(['./src/calcs.js', './src/utilities.js', './src/maneuvers.js'])
     .pipe($.file('homegrown.js', 'this.homegrown=this.homegrown||{};'))
   	.pipe($.concat('sailing.js'))
     .pipe(gulp.dest('./dist'))
@@ -37,5 +37,6 @@ gulp.task('bump', ['test'], function () {
 
 
 gulp.task('test', ['lint', 'unitTest']);
-gulp.task('release', ['bump', 'dist', 'clean']);
+gulp.task('build', ['dist', 'clean']);
+gulp.task('release', ['bump', 'build']);
 gulp.task('default', ['test']);

@@ -1,11 +1,11 @@
 (function (global, factory) {
     if (typeof exports === 'object' && typeof module !== 'undefined') {
-        factory(exports, require('lodash'));
+        factory(exports, require('lodash'), require('./calcs.js'));
     }
     else {
-        factory((global.homegrown.utilities = {}), global._);
+        factory((global.homegrown.utilities = {}), global._, global.homegrown.calculations);
     }
-}(this, function (exports, _) {'use strict';
+}(this, function (exports, _, calcs) {'use strict';
 
     //from stack overflow
     var remove_comments_regex = /((\/\/.*$)|(\/\*[\s\S]*?\*\/))/mg;
@@ -20,65 +20,80 @@
 
     var utilities = {
         /**
-         * given a metric, will compute it's derivitive.
-         * @param name - the name of the derivitive
+         * given a metric, will compute it's derivitive and append incoming data points
+         *          with new metric.
+         * @param name - the name of the new metric created from the derivitive
          * @param metric - the name of the metric to calculate the derivitive from
          * @param [scaleFactor] - optional conversion factor, if the new metric should
          *                        be in different units.
          * @return 
-
-         * Example: var acceleration = derivitive('acceleration', 'speed');
-         * assert acceleration({'speed': 5, 't':1000}) == null //first execution
-         * assert acceleration({'speed': 5, 't':1000}) == {'acceleration': 0}
-         * assert acceleration({'speed': 6, 't':1000}) == {'acceleration': 1}
          */
-
-        //TODO: rename derivative
-        derivitive: function derivitive(name, metric, scaleFactor) {
+        derivative: function derivative(name, metric, scaleFactor) {
             scaleFactor = scaleFactor || 1;
             var lastValue = null, lastTime;
 
-            return function(args) {
-                var result = null;
-
-                if (metric in args) {
+            return function(point) {
+                if (metric in point) {
                     if (lastValue !== null) {
-                        var delta = (args[metric] - lastValue) / ((args.t - lastTime)/1000) * scaleFactor;
+                        var delta = (point[metric] - lastValue) / ((point.t - lastTime)/1000) * scaleFactor;
 
-                        result = {};
-                        result[name] = delta;
+                        point[name] = delta;
                     }
 
-                    lastValue = args[metric];
-                    lastTime = args.t;
+                    lastValue = point[metric];
+                    lastTime = point.t;
                 }
-
-                return result;
             };
         },
-        average: function average(name, metric, size) {
+        /**
+         * will average a metric with a trailing window, and append the new value to the 
+         *          incoming point.
+         * @param name - the name of the new metric created from the average
+         * @param 
+         * 
+         */
+        average: function average(name, metric, windowSize) {
             var rolling = 0;
             var counter = 0;
             var windowX = [];
 
-            return function(args) {
-                var result = null;
-
-                if (metric in args) {
-                    var pos = counter % size;
+            return function(point) {
+                if (metric in point) {
+                    var pos = counter % windowSize;
                     counter++;
 
                     if (windowX[pos]) {
                         rolling -= windowX[pos];
                     }
-                    rolling += args[metric];
-                    windowX[pos] = args[metric];
+                    rolling += point[metric];
+                    windowX[pos] = point[metric];
 
-                    result = {};
-                    result[name] = rolling / windowX.length;
+                    point[name] = rolling / windowX.length;
                 }
+            };
+        },
 
-                return result;
+        inlineUpdate: function inlineUpdate(funct, property) {
+            return function(point) {
+                if ( property in point ) {
+                    point[property] = funct(point[property]);
+                }
+            };
+        },
+
+        /**
+         * Adjust Awa based on Heel angle.
+         */
+        inlineAwaAdjustment: function inlineAwaAdjustment() {
+            var lastHeel = 0;
+
+            return function(point) {
+                if ( 'heel' in point ) {
+                    lastHeel = point.heel;
+                }
+                if ( 'awa' in point ) {
+                    point.awa = calcs.adjustAwaForHeel(point.awa, lastHeel);
+                }
             };
         },
 
@@ -87,20 +102,18 @@
          * @param funct - the name of the function will be used to name the return value.  
          *                The name of the arguments will be used to pull the arguments out 
          *                of maps of possible arguments.
-         * @return {object} - will return null if all of the arguments aren't avaible to execute the
-         *                    function, or an object of the form: {function_name: result}.
          */
-        delayedInputs: function delayedInputs(funct) {
-            var argumentNames = getParamNames(funct);
+        delayedInputs: function delayedInputs(funct, output, argumentNames) {
+            argumentNames = argumentNames || getParamNames(funct);
+            output = output || funct.name;
+
             var runningArgs = [];
 
-            return function(args) {
-                // var presentValues = _.map(argumentNames, function(name) { return args[name]; });
-
+            return function(point) {
                 var allSet = true;
                 for( var i=0; i < argumentNames.length; i++ ) {
-                    if ( argumentNames[i] in args ) {
-                        runningArgs[i] = args[argumentNames[i]];
+                    if ( argumentNames[i] in point ) {
+                        runningArgs[i] = point[argumentNames[i]];
                     }
 
                     if ( !runningArgs[i] ) {
@@ -112,12 +125,9 @@
                 if (allSet) {
                     var result = funct.apply(this, runningArgs);
                     runningArgs = [];
-                    var obj = {};
-                    obj[funct.name] = result;
-                    return obj;
+                    
+                    point[output] = result;
                 }
-
-                return null;
             };
         },
 
@@ -232,6 +242,11 @@
 
             return segments;
         }, 
+
+        /**
+         * Calulate the circular mean of an array of angles
+         * 
+         */
         circularMean: function circularMean(dat) {
             var sinComp = 0, cosComp = 0;
             _.each(dat, function(angle) {

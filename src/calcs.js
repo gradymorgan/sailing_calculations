@@ -10,7 +10,7 @@
     var R = 3440.06479; //radius of earth in nautical miles
 
     var deg = function deg(radians) {
-        return (radians*180/Math.PI + 360) % 360;
+        return calcs.normalizeHeading(radians*180/Math.PI, 360);
     };
 
     var rad = function rad(degrees) {
@@ -22,9 +22,6 @@
     };
 
     var calcs = {
-        // adjustedAwa: function awa(awa, heel) {
-        //     return deg(atan( tan(rad(awa)) / cos(rad(heel)) ));
-        // },
         tws: function tws(speed, awa, aws) {
             //TODO: heel compensation
             return lawOfCosines(speed, aws, awa);
@@ -42,7 +39,7 @@
 
         gwd: function gwd(sog, cog, awa, gws) {
             var gwa = calcs.twa(sog, awa, gws);
-            return (cog + gwa + 360) % 360;
+            return calcs.normalizeHeading(cog + gwa, 360);
         },
 
         vmg: function vmg(speed, twa) {
@@ -50,7 +47,7 @@
         },
 
         twd: function twd(hdg, twa) {
-            return (hdg + twa + 360) % 360;
+            return calcs.normalizeHeading(hdg + twa, 360);
         },
 
         //see: http://www.movable-type.co.uk/scripts/latlong.html
@@ -85,12 +82,7 @@
 
         steer: function steer(from, to) {
             var diff = to - from;
-            if ( diff > 180 ) {
-                diff = 360 - diff;
-            }
-            else if ( diff < -180 ) {
-                diff = 360 + diff;
-            }
+            
 
             return diff;
         },
@@ -119,7 +111,7 @@
             }
             else {
                 //normalize 0 - 360
-                _set = (90.0 - deg(Math.atan2(current_y, current_x)) + 360) % 360;
+                _set = calcs.normalizeHeading(90.0 - deg(Math.atan2(current_y, current_x)), 360);
             }
             return _set;
         },
@@ -138,6 +130,47 @@
             var _drift = Math.sqrt(current_x * current_x + current_y * current_y);
             return _drift;
         },
+
+        offest: function( offset ) {
+            return function(value) {
+                return value + offset;
+            }
+        },
+
+        multiplied: function( factor ) {
+            return function(value) {
+                return value * factor;
+            }
+        },
+
+        normalizeAngle: function(awa) {
+            if (awa > 180) {
+                awa = -1 * (360 - awa);
+            }
+            if (awa < -180) {
+                awa = (360 + awa);
+            }
+            return awa;
+        },
+
+        normalizeHeading: function(heading, base) {
+            base = base || 360;
+
+            return (heading + base) % base;
+        },
+
+        adjustAwaForHeel: function( awa, heel ) {
+            var adjustedAwa = deg(Math.atan( Math.tan(rad(awa)) / Math.cos(rad(heel)) ));
+            if (awa > 90) {
+                adjustedAwa += 180;
+            }
+            if (awa < -90) {
+                adjustedAwa -= 180;
+            }
+            return adjustedAwa;
+        },
+
+
 
         courseDistance: function courseLength(course, marks) {
             var distance = 0;
