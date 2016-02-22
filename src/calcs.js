@@ -10,7 +10,7 @@
     var R = 3440.06479; //radius of earth in nautical miles
 
     var deg = function deg(radians) {
-        return calcs.normalizeHeading(radians*180/Math.PI, 360);
+        return radians*180/Math.PI;
     };
 
     var rad = function rad(degrees) {
@@ -77,7 +77,7 @@
             var y = Math.sin(dLon) * Math.cos(lat2);
             var x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
             
-            return deg( Math.atan2(y, x) );
+            return calcs.normalizeHeading( deg(Math.atan2(y, x)), 360 );
         },
 
         steer: function steer(from, to) {
@@ -145,10 +145,10 @@
 
         normalizeAngle: function(awa) {
             if (awa > 180) {
-                awa = -1 * (360 - awa);
+                awa = awa - 360;
             }
             if (awa < -180) {
-                awa = (360 + awa);
+                awa = awa + 360;
             }
             return awa;
         },

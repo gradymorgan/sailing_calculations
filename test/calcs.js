@@ -27,6 +27,20 @@ describe('tws', function() {
 describe('twa', function() {
     it('should calculate correctly', function() {
         assert.closeTo( calcs.twa( 6, 45, 8.84), 73.68, 0.01 );
+        assert.closeTo( calcs.twa( 6, -45, 8.84), -73.68, 0.01 );
+    });
+});
+
+describe('adjustAwaForHeel', function() {
+    it('should calculate correctly', function() {
+        assert.closeTo( calcs.adjustAwaForHeel(45, 0), 45, 0.01 );
+        assert.closeTo( calcs.adjustAwaForHeel(-45, 0), -45, 0.01 );
+        assert.closeTo( calcs.adjustAwaForHeel(145, 0), 145, 0.01 );
+        assert.closeTo( calcs.adjustAwaForHeel(-145, 0), -145, 0.01 );
+
+        assert.closeTo( calcs.adjustAwaForHeel(45, 20), 46.78, 0.01 );
+        assert.closeTo( calcs.adjustAwaForHeel(145, 20), 143.31, 0.01 );
+
     });
 });
 
@@ -56,6 +70,7 @@ describe('courseDistance', function() {
               ]
             };
 
+        //TODO: haven't validated this yet
         assert.closeTo( calcs.courseDistance(course, marks), 6.2, 0.01 );
     });
 });
